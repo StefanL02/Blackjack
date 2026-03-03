@@ -27,6 +27,14 @@ class Rules:
     # Payouts
     BLACKJACK_PAYOUT_PROFIT = 1.5  # 3:2 profit (win = bet * 1.5, plus returning bet handled via winnings calc)
 
+    # Hi-Lo Card Counting Config
+    COUNTING_ENABLED = True
+    HI_LO_TAGS = {
+        "2": 1, "3": 1, "4": 1, "5": 1, "6": 1,
+        "7": 0, "8": 0, "9": 0,
+        "10": -1, "Jack": -1, "Queen": -1, "King": -1, "Ace": -1,
+    }
+
 
 # ============================================================
 # BASIC STRATEGY TABLES (4–8 decks, H17, DAS, Late Surrender)
@@ -87,6 +95,8 @@ PAIRS_TABLE = {
 }
 
 
+
+
 def card_value_for_upcard(card):
     r = card["rank"]
     if r.isdigit():
@@ -134,9 +144,14 @@ class BasicStrategyEngine:
             and current_hand_count < rules.MAX_HANDS
         )
 
+        if (rules.SPLIT_ACES_ONE_CARD_ONLY
+                and getattr(hand, "is_split_aces_hand", False)
+                and len(hand.cards) >= 2):
+            return "stand"
+
         if can_split and not rules.RESPLIT_ACES_ALLOWED:
-            # If this hand was created by splitting Aces, never allow splitting again
-            if getattr(hand, "is_split_aces_hand", False):
+            # Specifically block re-splitting only if it's a new pair of Aces
+            if getattr(hand, "is_split_aces_hand", False) and hand.cards[0]["rank"] == "Ace":
                 can_split = False
 
         # Double: allowed on first two cards; disable after split if DAS is off
@@ -258,7 +273,7 @@ class Hand:
 
         # Split Aces restrictions
         self.is_split_aces_hand = False
-        self.split_aces_locked = False
+
 
     def add_card(self, card):
         self.cards.append(card)
@@ -394,16 +409,13 @@ class Dealer:
                 player.add_card_to_hand(card)
 
         # dealer hole card
-        card = self.game_manager._get_card_with_reshuffle()
+        card = self.game_manager._get_card_with_reshuffle(visible=False)
         if card:
             self.dealer_hand.add_card(card)
 
-    def deal_card_to_player(self, player_index, hand_index):
-        # This method is now problematic as player_index is a list index, not player.id
-        # It will be called within handle_player_turns, which iterates over actual players.
-        # The `player_index` here is actually the index in `self.players` list.
+    def deal_card_to_player(self, player_index, hand_index, visible=True):
         if 0 <= player_index < len(self.players):
-            card = self.game_manager._get_card_with_reshuffle()
+            card = self.game_manager._get_card_with_reshuffle(visible=visible)
             if card:
                 self.players[player_index].add_card_to_hand(card, hand_index)
 
@@ -424,6 +436,10 @@ class GameManager:
 
         self.num_decks = num_decks
         self.shoe = Shoe(num_decks)
+
+        self.running_count = 0
+        self.update_true_count()
+        self.hole_card_revealed = False
 
         self.eliminated_players = []
         self.initial_shoe_size = len(self.shoe)
@@ -448,11 +464,18 @@ class GameManager:
             self.initial_shoe_size = len(self.shoe)
             self.reshuffle_threshold = int(self.initial_shoe_size * self.rules.RESHUFFLE_AT_REMAINING)
             self.dealer.shoe = self.shoe
-            self.log(f"Shoe reshuffled. New shoe size: {len(self.shoe)}")
 
-    def _get_card_with_reshuffle(self):
+            self.log(f"Shoe reshuffled. New shoe size: {len(self.shoe)}")
+            self.running_count = 0
+            self.update_true_count()  # Derives 0.0 correctly from the fresh shoe
+            self.hole_card_revealed = False  # Ensures the new round's hole card isn't "pre-revealed"
+
+    def _get_card_with_reshuffle(self, visible=True):
         self._reshuffle_if_needed()
-        return self.shoe.deal()
+        card = self.shoe.deal()
+        if card and visible:
+            self.update_running_count(card)
+        return card
 
     def place_bets(self):
         self.log("\n--- Placing Bets ---")
@@ -477,16 +500,47 @@ class GameManager:
         v = card_value_for_upcard(up)
         return v in (10, 11)
 
+    def reveal_hole_card(self):
+        # Idempotent check: if it's already counted, stop.
+        if self.hole_card_revealed:
+            return
+
+        if len(self.dealer.dealer_hand.cards) >= 2:
+            hole_card = self.dealer.dealer_hand.cards[1]
+            self.update_running_count(hole_card)
+            self.hole_card_revealed = True  # Lock it so we don't count it again
+
+    def update_running_count(self, card):
+        if not card or not getattr(self.rules, "COUNTING_ENABLED", False):
+            return
+
+        # 1. Update Running Count
+        self.running_count += self.rules.HI_LO_TAGS.get(card["rank"], 0)
+
+        # 2. Automatically refresh the True Count
+        self.update_true_count()
+
+    def estimate_decks_remaining(self):
+        # simplest “Monte Carlo ready” estimate
+        remaining = len(self.shoe)
+        return max(remaining / 52.0, 0.25)  # avoid divide-by-zero / tiny numbers
+
+    def update_true_count(self):
+        decks_rem = self.estimate_decks_remaining()
+        self.true_count = self.running_count / decks_rem
+
     def start_round(self):
         self.stats["rounds"] += 1
+        self.hole_card_revealed = False
         self.log("\nStarting a new round...")
+
+
+        self._reshuffle_if_needed()
 
         self.place_bets()
         if not self.dealer.players:
             self.log("No players left in the game. Ending round.")
             return
-
-        self._reshuffle_if_needed()
 
         self.dealer.dealer_hand = Hand()
         self.dealer.deal_initial_cards()
@@ -499,6 +553,7 @@ class GameManager:
         if self.dealer_should_peek():
             if self.dealer_has_blackjack():
                 self.log("\nDealer has Blackjack!")
+                self.reveal_hole_card()
                 dealer_peeked_no_blackjack = False
             else:
                 dealer_peeked_no_blackjack = True
@@ -509,6 +564,7 @@ class GameManager:
             return
 
         self.handle_player_turns(dealer_peeked_no_blackjack)
+        self.reveal_hole_card()
         self.handle_dealer_turn()
         self.settle_bets()
 
@@ -599,15 +655,6 @@ class GameManager:
                             # The current `hand_index` now refers to the first of the two new hands.
                             self.dealer.deal_card_to_player(player_current_list_index, hand_index) # Deal to the first new hand
                             self.dealer.deal_card_to_player(player_current_list_index, hand_index + 1) # Deal to the second new hand
-
-                            # If this was a split of Aces, lock both hands (no further hits)
-                            h1 = player.hands[hand_index]
-                            h2 = player.hands[hand_index + 1]
-                            if (self.rules.SPLIT_ACES_ONE_CARD_ONLY
-                                and getattr(h1, "is_split_aces_hand", False)
-                                and getattr(h2, "is_split_aces_hand", False)):
-                                h1.split_aces_locked = True
-                                h2.split_aces_locked = True
 
                             self.log(f"  Split performed. Remaining balance: {player.balance}")
                             split_done = True

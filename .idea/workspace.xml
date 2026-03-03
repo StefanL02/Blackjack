@@ -179,7 +179,7 @@
       <workItem from="1770248008842" duration="16000" />
       <workItem from="1770282804430" duration="26657000" />
       <workItem from="1770901751398" duration="596000" />
-      <workItem from="1772110219132" duration="6909000" />
+      <workItem from="1772110219132" duration="15149000" />
     </task>
     <servers />
   </component>
@@ -188,7 +188,7 @@
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/Blackjack$blackjack__1_.coverage" NAME="blackjack (1) Coverage Results" MODIFIED="1770241053480" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
-    <SUITE FILE_PATH="coverage/Blackjack$blackjack.coverage" NAME="blackjack Coverage Results" MODIFIED="1772483183228" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/Blackjack$blackjack.coverage" NAME="blackjack Coverage Results" MODIFIED="1772533708844" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/Blackjack$blackjack_test.coverage" NAME="blackjack_test Coverage Results" MODIFIED="1770240808746" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
     <SUITE FILE_PATH="coverage/Blackjack$.coverage" NAME=" Coverage Results" MODIFIED="1770305588254" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/Blackjack$Blackjack.coverage" NAME="Blackjack Coverage Results" MODIFIED="1770227050598" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
