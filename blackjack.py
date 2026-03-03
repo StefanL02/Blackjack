@@ -20,6 +20,10 @@ class Rules:
     DOUBLE_AFTER_SPLIT = True  # DAS
     MAX_HANDS = 4  # up to 3 splits (4 hands total)
 
+    # Split Aces restrictions
+    SPLIT_ACES_ONE_CARD_ONLY = True      # after splitting Aces: deal 1 card per hand then auto-stand
+    RESPLIT_ACES_ALLOWED = False         # if you draw another Ace after split, you cannot split again
+
     # Payouts
     BLACKJACK_PAYOUT_PROFIT = 1.5  # 3:2 profit (win = bet * 1.5, plus returning bet handled via winnings calc)
 
@@ -130,12 +134,22 @@ class BasicStrategyEngine:
             and current_hand_count < rules.MAX_HANDS
         )
 
+        if can_split and not rules.RESPLIT_ACES_ALLOWED:
+            # If this hand was created by splitting Aces, never allow splitting again
+            if getattr(hand, "is_split_aces_hand", False):
+                can_split = False
+
         # Double: allowed on first two cards; disable after split if DAS is off
         can_double = (
             len(hand.cards) == 2
             and rules.DOUBLE_ANY_TWO
         )
         if getattr(hand, "is_split_hand", False) and not rules.DOUBLE_AFTER_SPLIT:
+            can_double = False
+
+        # Split Aces restriction: no doubling (hand is effectively forced-stand after 1 card anyway)
+        if (rules.SPLIT_ACES_ONE_CARD_ONLY
+                and getattr(hand, "is_split_aces_hand", False)):
             can_double = False
 
         # ---- Pairs table
@@ -242,6 +256,10 @@ class Hand:
         self.doubled = False
         self.is_split_hand = False
 
+        # Split Aces restrictions
+        self.is_split_aces_hand = False
+        self.split_aces_locked = False
+
     def add_card(self, card):
         self.cards.append(card)
 
@@ -314,14 +332,22 @@ class Player:
         if not hand_to_split.is_pair():
             return False
 
+        splitting_aces = (hand_to_split.cards[0]["rank"] == "Ace")
+
         # create two hands
         new_hand1 = Hand(hand_to_split.bet)
         new_hand2 = Hand(hand_to_split.bet)
         new_hand1.is_split_hand = True
         new_hand2.is_split_hand = True
 
+        if splitting_aces:
+            new_hand1.is_split_aces_hand = True
+            new_hand2.is_split_aces_hand = True
+
         new_hand1.add_card(hand_to_split.cards[0])
         new_hand2.add_card(hand_to_split.cards[1])
+
+
 
         self.hands.pop(hand_index)
         self.hands.insert(hand_index, new_hand2)
@@ -500,6 +526,14 @@ class GameManager:
                 hand = player.hands[hand_index]
                 self.log(f"  Hand {hand_index + 1}: {hand}")
 
+                # Split Aces restriction: once split-ace hand has received its 1 card, it is dead
+                if (self.rules.SPLIT_ACES_ONE_CARD_ONLY
+                        and getattr(hand, "is_split_aces_hand", False)
+                        and len(hand.cards) >= 2):
+                    self.log("  Split Aces restriction: stand (one card only).")
+                    hand_index += 1
+                    continue
+
                 # Natural blackjack (player)
                 if hand.get_value() == 21 and len(hand.cards) == 2:
                     self.stats["blackjacks"] += 1
@@ -565,6 +599,16 @@ class GameManager:
                             # The current `hand_index` now refers to the first of the two new hands.
                             self.dealer.deal_card_to_player(player_current_list_index, hand_index) # Deal to the first new hand
                             self.dealer.deal_card_to_player(player_current_list_index, hand_index + 1) # Deal to the second new hand
+
+                            # If this was a split of Aces, lock both hands (no further hits)
+                            h1 = player.hands[hand_index]
+                            h2 = player.hands[hand_index + 1]
+                            if (self.rules.SPLIT_ACES_ONE_CARD_ONLY
+                                and getattr(h1, "is_split_aces_hand", False)
+                                and getattr(h2, "is_split_aces_hand", False)):
+                                h1.split_aces_locked = True
+                                h2.split_aces_locked = True
+
                             self.log(f"  Split performed. Remaining balance: {player.balance}")
                             split_done = True
                             break
@@ -622,7 +666,7 @@ class GameManager:
             return "win"
 
         # natural blackjacks
-        player_bj = (pv == 21 and len(player_hand.cards) == 2)
+        player_bj = (pv == 21 and len(player_hand.cards) == 2 and not getattr(player_hand, "is_split_hand", False))
         dealer_bj = (dv == 21 and len(dealer_hand.cards) == 2)
         if player_bj and not dealer_bj:
             return "blackjack"
