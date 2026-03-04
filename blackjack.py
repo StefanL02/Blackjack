@@ -27,6 +27,10 @@ class Rules:
     # Payouts
     BLACKJACK_PAYOUT_PROFIT = 1.5  # 3:2 profit (win = bet * 1.5, plus returning bet handled via winnings calc)
 
+    #Insurance Rules
+    INSURANCE_ENABLED = True
+    INSURANCE_TC_THRESHOLD = 3  # take insurance if true_count >= 3
+
     # Hi-Lo Card Counting Config
     COUNTING_ENABLED = True
     HI_LO_TAGS = {
@@ -273,6 +277,7 @@ class Hand:
 
         # Split Aces restrictions
         self.is_split_aces_hand = False
+        self.insurance_bet = 0.0
 
 
     def add_card(self, card):
@@ -325,12 +330,13 @@ class Hand:
 class Player:
     _player_counter = 0  # Class-level counter for unique IDs
 
-    def __init__(self, bet=0, balance=1000, max_hands=Rules.MAX_HANDS):
+    def __init__(self, bet=0, balance=1000, max_hands=Rules.MAX_HANDS, is_counter=False):
         Player._player_counter += 1
         self.id = Player._player_counter  # Assign a unique ID
         self.hands = [Hand(bet)]
         self.balance = balance
         self.max_hands = max_hands
+        self.is_counter = is_counter
 
     def add_card_to_hand(self, card, hand_index=0):
         if 0 <= hand_index < len(self.hands):
@@ -413,12 +419,6 @@ class Dealer:
         if card:
             self.dealer_hand.add_card(card)
 
-    def deal_card_to_player(self, player_index, hand_index, visible=True):
-        if 0 <= player_index < len(self.players):
-            card = self.game_manager._get_card_with_reshuffle(visible=visible)
-            if card:
-                self.players[player_index].add_card_to_hand(card, hand_index)
-
     def __str__(self):
         player_hands_str = "\n".join([f"Player {p.id}:\n{p}" for p in self.players])
         return f"Dealer's Hand: {self.dealer_hand}\n{player_hands_str}"
@@ -447,8 +447,16 @@ class GameManager:
 
         self.dealer = Dealer(self.shoe, num_players, self)
         # Create players with unique IDs
-        self.dealer.players = [Player(bet=0, balance=1000, max_hands=Rules.MAX_HANDS) for _ in range(num_players)]
+        self.dealer.players = [Player(bet=0, balance=1000, max_hands=Rules.MAX_HANDS, is_counter=False) for _ in range(num_players)]
         self.starting_bankroll = 1000
+
+        for i, player in enumerate(self.dealer.players):
+            if i < 3:
+                player.is_counter = True
+                self.log(f"Player {player.id} assigned as COUNTER.")
+            else:
+                player.is_counter = False
+                self.log(f"Player {player.id} assigned as BASIC STRATEGY.")
 
         # optional: basic stats (extend for Monte Carlo later)
         self.stats = {"rounds": 0, "hands": 0, "wins": 0, "losses": 0, "pushes": 0, "blackjacks": 0, "surrenders": 0}
@@ -545,31 +553,54 @@ class GameManager:
         self.dealer.dealer_hand = Hand()
         self.dealer.deal_initial_cards()
 
+        # 1. Offer Insurance (Only if dealer shows Ace)
+        if self.rules.INSURANCE_ENABLED and card_value_for_upcard(self.dealer.dealer_hand.cards[0]) == 11:
+            self.offer_insurance()
+
         self.log("\n--- Initial Deal ---")
         self.log(str(self.dealer))
 
-        # Dealer peek / immediate blackjack check
-        dealer_peeked_no_blackjack = True
-        if self.dealer_should_peek():
-            if self.dealer_has_blackjack():
-                self.log("\nDealer has Blackjack!")
-                self.reveal_hole_card()
-                dealer_peeked_no_blackjack = False
-            else:
-                dealer_peeked_no_blackjack = True
+        # 2. Check for Dealer Blackjack (The "Peek") -
+        dealer_bj = self.dealer_has_blackjack()
 
-        # If dealer has blackjack, skip player/dealer turns, settle directly
-        if self.dealer_has_blackjack():
+        if dealer_bj:
+            self.log("\nDealer has Blackjack!")
+            self.reveal_hole_card()
             self.settle_bets()
             return
 
-        self.handle_player_turns(dealer_peeked_no_blackjack)
+        # 3. Player Turns
+        self.handle_player_turns(dealer_peeked_no_blackjack=True)
+
+        # 4. Reveal hole card for the count, then dealer plays
         self.reveal_hole_card()
         self.handle_dealer_turn()
         self.settle_bets()
 
         self.log("\nRound finished.")
-        self.log(str(self.dealer))
+
+    def offer_insurance(self):
+        # only relevant if counting is enabled
+        if not self.rules.COUNTING_ENABLED:
+            return
+
+        take = (self.true_count >= self.rules.INSURANCE_TC_THRESHOLD)
+
+        for player in self.dealer.players:
+            if not getattr(player, "is_counter", False):
+                continue  # basic-strategy player: never offered / never takes insurance
+
+            for hand in player.hands:
+                if len(hand.cards) != 2:
+                    continue
+                ins = 0.5 * hand.bet
+                if take and player.balance >= ins:
+                    player.balance -= ins
+                    hand.insurance_bet = ins
+                    self.log(f"Player {player.id} (COUNTER) takes insurance: {ins} (TC={self.true_count:.2f})")
+                else:
+                    hand.insurance_bet = 0.0
+                    self.log(f"Player {player.id} (COUNTER) declines insurance (TC={self.true_count:.2f})")
 
     def handle_player_turns(self, dealer_peeked_no_blackjack):
         self.log("\n--- Player Turns ---")
@@ -621,46 +652,57 @@ class GameManager:
                     elif decision == "surrender":
                         # late surrender only valid on first two cards; strategy enforces it already
                         hand.surrendered = True
-                        self.stats["surrenders"] += 1
                         self.log("  Surrender.")
                         break
 
+
                     elif decision == "double":
-                        # Double: take one card only, then stand
+
                         if len(hand.cards) == 2 and player.balance >= hand.bet:
+
                             player.balance -= hand.bet
+
                             hand.bet *= 2
+
                             hand.doubled = True
-                            self.dealer.deal_card_to_player(player_current_list_index, hand_index)
-                            hand = player.hands[hand_index] # re-bind after deal_card_to_player
+
+                            card = self._get_card_with_reshuffle()
+
+                            if card:
+                                player.add_card_to_hand(card, hand_index)
+
+                            hand = player.hands[hand_index]
+
                             self.log(f"  Double. New bet: {hand.bet}. Hand: {hand}")
+
                             if hand.get_value() > 21:
                                 self.log("  Bust!")
-                            break
-                        else:
-                            # fallback if not allowed
-                            self.log("  Double not allowed -> Stand.")
+
                             break
 
+
                     elif decision == "split":
-                        # Check funds for extra bet
+
                         if player.balance < hand.bet:
                             self.log("  Split not allowed (insufficient funds) -> Stand.")
+
                             break
 
                         if player.split_hand(hand_index):
+
                             player.balance -= hand.bet
-                            # Deal one card to each new hand
-                            # Note: when splitting, new hands are inserted at `hand_index` and `hand_index + 1`
-                            # The current `hand_index` now refers to the first of the two new hands.
-                            self.dealer.deal_card_to_player(player_current_list_index, hand_index) # Deal to the first new hand
-                            self.dealer.deal_card_to_player(player_current_list_index, hand_index + 1) # Deal to the second new hand
+
+                            for i in [hand_index, hand_index + 1]:
+
+                                card = self._get_card_with_reshuffle()
+
+                                if card:
+                                    player.add_card_to_hand(card, i)
 
                             self.log(f"  Split performed. Remaining balance: {player.balance}")
+
                             split_done = True
-                            break
-                        else:
-                            self.log("  Split not allowed -> Stand.")
+
                             break
 
                     else:
@@ -732,6 +774,7 @@ class GameManager:
     def settle_bets(self):
         self.log("\n--- Settling Bets ---")
         dealer_hand = self.dealer.dealer_hand
+        dealer_bj = self.dealer_has_blackjack()
         active_players = []
 
         for player in self.dealer.players:
@@ -740,27 +783,44 @@ class GameManager:
                 self.stats["hands"] += 1
                 outcome = self.determine_outcome(hand, dealer_hand)
                 bet = hand.bet
-                winnings = 0
 
-                if outcome == "win":
-                    winnings = bet * 2
+                # 1. Main Hand Settlement & Metrics
+                if outcome == "blackjack":
                     self.stats["wins"] += 1
-                elif outcome == "blackjack":
-                    # Return bet + profit(1.5*bet) = 2.5*bet
+                    # self.stats["blackjacks"] is already handled in handle_player_turns
                     winnings = bet * (1 + self.rules.BLACKJACK_PAYOUT_PROFIT)
+                    self.log(f"  Hand: BLACKJACK! Profit: +{bet * 1.5}")
+                elif outcome == "win":
                     self.stats["wins"] += 1
+                    winnings = bet * 2
+                    self.log(f"  Hand: WIN. Profit: +{bet}")
                 elif outcome == "push":
-                    winnings = bet
                     self.stats["pushes"] += 1
+                    winnings = bet
+                    self.log(f"  Hand: PUSH. Bet returned.")
                 elif outcome == "surrender":
+                    self.stats["surrenders"] += 1  # Track specifically
                     winnings = bet * 0.5
+                    self.log(f"  Hand: SURRENDER. Loss: -{bet * 0.5}")
+                else:
                     self.stats["losses"] += 1
-                else:  # bust or lose
                     winnings = 0
-                    self.stats["losses"] += 1
+                    self.log(f"  Hand: {outcome.upper()}. Loss: -{bet}")
 
                 player.balance += winnings
-                self.log(f"  Hand (Bet: {bet}): Outcome: {outcome}, Winnings: {winnings}. New balance: {player.balance}")
+
+                # 2. Insurance Settlement
+                if hand.insurance_bet > 0:
+                    if dealer_bj:
+                        # 3:1 total return (2:1 profit + stake back)
+                        ins_payout = hand.insurance_bet * 3
+                        player.balance += ins_payout
+                        self.log(f"  [INSURANCE WIN] +{hand.insurance_bet * 2} profit.")
+                    else:
+                        self.log(f"  [INSURANCE LOSS] Dealer no BJ. Stake lost.")
+
+                    # IMPORTANT: Reset for safety
+                    hand.insurance_bet = 0.0
 
             if player.balance > 0:
                 active_players.append(player)
@@ -795,57 +855,43 @@ class GameManager:
         print("\n--- Summary Stats ---")
         print(self.stats)
 
-        # Export summary stats
-        file_exists = os.path.isfile("summary_stats.csv")
-        with open("summary_stats.csv", "a", newline="") as f:
-            writer = csv.DictWriter(
-                f,
-                fieldnames=["Run ID"] + list(self.stats.keys())
-            )
+        # --- Export summary stats ---
+        file_exists_summary = os.path.isfile("summary_stats.csv")
+        with open("summary_stats.csv", "a", newline="") as f_sum:
+            writer_sum = csv.DictWriter(f_sum, fieldnames=["Run ID"] + list(self.stats.keys()))
+            if not file_exists_summary:
+                writer_sum.writeheader()
+            writer_sum.writerow({"Run ID": self.run_id, **self.stats})
 
-            if not file_exists:
-                writer.writeheader()
-
-            writer.writerow({
-                "Run ID": self.run_id,
-                **self.stats
-            })
-
-        # Export player stats
-        file_exists = os.path.isfile("player_stats.csv")
-        with open("player_stats.csv", "a", newline="") as f:
-            fieldnames = [
-                "Run ID",
-                "Player ID",
-                "Start Bankroll",
-                "Final Balance",
-                "Net Profit"
-            ]
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-
-            if not file_exists:
-                writer.writeheader()
+        # --- Export player stats ---
+        file_exists_player = os.path.isfile("player_stats.csv")
+        with open("player_stats.csv", "a", newline="") as f_play:
+            fieldnames = ["Run ID", "Player ID", "Role", "Start Bankroll", "Final Balance", "Net Profit"]
+            writer_play = csv.DictWriter(f_play, fieldnames=fieldnames)
+            if not file_exists_player:
+                writer_play.writeheader()
 
             all_players = self.dealer.players + self.eliminated_players
             for player in all_players:
-                writer.writerow({
+                role = "Counter" if player.is_counter else "Basic"
+                writer_play.writerow({
                     "Run ID": self.run_id,
                     "Player ID": player.id,
+                    "Role": role,
                     "Start Bankroll": self.starting_bankroll,
                     "Final Balance": player.balance,
                     "Net Profit": player.balance - self.starting_bankroll
                 })
 
-        print("\nCSV files exported:")
-        print(os.path.abspath("summary_stats.csv"))
-        print(os.path.abspath("player_stats.csv"))
-
+            print("\nCSV files exported:")
+            print(os.path.abspath("summary_stats.csv"))
+            print(os.path.abspath("player_stats.csv"))
 
 
 
 if __name__ == "__main__":
     num_decks = Rules.NUM_DECKS
-    num_players = 5
+    num_players = 6
     num_rounds = 1000
 
     # Debug mode: verbose=True
