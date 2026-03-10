@@ -450,16 +450,17 @@ class GameManager:
         self.dealer.players = [Player(bet=0, balance=1000, max_hands=Rules.MAX_HANDS, is_counter=False) for _ in range(num_players)]
         self.starting_bankroll = 1000
 
+        # Assign roles: Only Player 1 is a Counter, everyone else is Basic Strategy
         for i, player in enumerate(self.dealer.players):
-            if i < 3:
+            if i == 0:  # The first player (Index 0)
                 player.is_counter = True
-                self.log(f"Player {player.id} assigned as COUNTER.")
+                self.log(f"Player {player.id} assigned as THE COUNTER.")
             else:
                 player.is_counter = False
                 self.log(f"Player {player.id} assigned as BASIC STRATEGY.")
 
         # optional: basic stats (extend for Monte Carlo later)
-        self.stats = {"rounds": 0, "hands": 0, "wins": 0, "losses": 0, "pushes": 0, "blackjacks": 0, "surrenders": 0}
+        self.stats = {"rounds": 0, "hands": 0, "wins": 0, "losses": 0, "busts": 0, "pushes": 0, "blackjacks": 0, "surrenders": 0}
 
     def log(self, msg):
         if self.verbose:
@@ -509,14 +510,14 @@ class GameManager:
         return v in (10, 11)
 
     def reveal_hole_card(self):
-        # Idempotent check: if it's already counted, stop.
+        # If it's already counted, stop.
         if self.hole_card_revealed:
             return
 
         if len(self.dealer.dealer_hand.cards) >= 2:
             hole_card = self.dealer.dealer_hand.cards[1]
             self.update_running_count(hole_card)
-            self.hole_card_revealed = True  # Lock it so we don't count it again
+            self.hole_card_revealed = True
 
     def update_running_count(self, card):
         if not card or not getattr(self.rules, "COUNTING_ENABLED", False):
@@ -529,7 +530,6 @@ class GameManager:
         self.update_true_count()
 
     def estimate_decks_remaining(self):
-        # simplest “Monte Carlo ready” estimate
         remaining = len(self.shoe)
         return max(remaining / 52.0, 0.25)  # avoid divide-by-zero / tiny numbers
 
@@ -802,6 +802,10 @@ class GameManager:
                     self.stats["surrenders"] += 1  # Track specifically
                     winnings = bet * 0.5
                     self.log(f"  Hand: SURRENDER. Loss: -{bet * 0.5}")
+                elif outcome == "bust":
+                    self.stats["busts"] += 1
+                    winnings = 0
+                    self.log(f"  Hand: : {outcome.upper()}. Bust -{bet}")
                 else:
                     self.stats["losses"] += 1
                     winnings = 0
