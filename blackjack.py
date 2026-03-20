@@ -1,6 +1,7 @@
 import random
 import csv
 import os
+import math
 
 
 # ============================================================
@@ -39,6 +40,82 @@ class Rules:
         "10": -1, "Jack": -1, "Queen": -1, "King": -1, "Ace": -1,
     }
 
+    USE_PLAYING_DEVIATIONS = True
+    USE_FAB4 = True
+    USE_SPLIT_10_DEVIATIONS = True
+    USE_INSURANCE_INDEX = True
+
+    USE_BET_SPREAD = True
+    MIN_BET = 10
+    BET_RAMP = {
+        "tc_le_0": 10,
+        "tc_1": 20,
+        "tc_2": 40,
+        "tc_3": 60,
+        "tc_ge_4": 80,
+    }
+
+class BasicStrategyRules(Rules):
+    COUNTING_ENABLED = False
+    USE_PLAYING_DEVIATIONS = False
+    USE_FAB4 = False
+    USE_SPLIT_10_DEVIATIONS = False
+    USE_INSURANCE_INDEX = False
+    USE_BET_SPREAD = False
+
+
+class CountingNoDeviationsRules(Rules):
+    COUNTING_ENABLED = True
+    USE_PLAYING_DEVIATIONS = False
+    USE_FAB4 = False
+    USE_SPLIT_10_DEVIATIONS = False
+    USE_INSURANCE_INDEX = False
+    USE_BET_SPREAD = False
+
+
+class CountingWithInsuranceRules(Rules):
+    COUNTING_ENABLED = True
+    USE_PLAYING_DEVIATIONS = False
+    USE_FAB4 = False
+    USE_SPLIT_10_DEVIATIONS = False
+    USE_INSURANCE_INDEX = True
+    USE_BET_SPREAD = False
+
+
+class CountingWithBetSpreadRules(Rules):
+    COUNTING_ENABLED = True
+    USE_PLAYING_DEVIATIONS = False
+    USE_FAB4 = False
+    USE_SPLIT_10_DEVIATIONS = False
+    USE_INSURANCE_INDEX = False
+    USE_BET_SPREAD = True
+
+
+class PlayingDeviationsOnlyRules(Rules):
+    COUNTING_ENABLED = True
+    USE_PLAYING_DEVIATIONS = True
+    USE_FAB4 = False
+    USE_SPLIT_10_DEVIATIONS = False
+    USE_INSURANCE_INDEX = False
+    USE_BET_SPREAD = False
+
+
+class FullHiLoNoBetSpreadRules(Rules):
+    COUNTING_ENABLED = True
+    USE_PLAYING_DEVIATIONS = True
+    USE_FAB4 = True
+    USE_SPLIT_10_DEVIATIONS = True
+    USE_INSURANCE_INDEX = True
+    USE_BET_SPREAD = False
+
+
+class FullHiLoRules(Rules):
+    COUNTING_ENABLED = True
+    USE_PLAYING_DEVIATIONS = True
+    USE_FAB4 = True
+    USE_SPLIT_10_DEVIATIONS = True
+    USE_INSURANCE_INDEX = True
+    USE_BET_SPREAD = True
 
 # ============================================================
 # BASIC STRATEGY TABLES (4–8 decks, H17, DAS, Late Surrender)
@@ -225,6 +302,113 @@ class BasicStrategyEngine:
         # fallback
         return "hit" if total < 17 else "stand"
 
+class HiLoStrategyEngine:
+    @staticmethod
+    def decide(hand, dealer_up_card, rules, current_hand_count, dealer_peeked_no_blackjack, true_count):
+        basic_action = BasicStrategyEngine.decide(
+            hand=hand,
+            dealer_up_card=dealer_up_card,
+            rules=rules,
+            current_hand_count=current_hand_count,
+            dealer_peeked_no_blackjack=dealer_peeked_no_blackjack,
+        )
+
+        tc = math.floor(true_count)
+        dealer_up = card_value_for_upcard(dealer_up_card)
+        total = hand.get_value()
+
+        is_pair = hand.is_pair()
+        is_soft = hand.is_soft()
+
+        # Check for Surrender Deviations first (Fab 4)
+        can_surrender = rules.LATE_SURRENDER and len(hand.cards) == 2 and dealer_peeked_no_blackjack
+
+        if rules.USE_FAB4 and can_surrender and not is_soft and not is_pair:
+            if total == 15 and dealer_up == 10 and tc >= 0: return "surrender"
+            if total == 14 and dealer_up == 10 and tc >= 3: return "surrender"
+            if total == 15 and dealer_up == 9 and tc >= 2: return "surrender"
+            if total == 15 and dealer_up == 11 and tc >= 1: return "surrender"
+
+        # 10,10 splitting deviations
+        if rules.USE_SPLIT_10_DEVIATIONS and len(hand.cards) == 2:
+            r1 = hand.cards[0]["rank"]
+            r2 = hand.cards[1]["rank"]
+            ten_value_pair = r1 in ("10", "Jack", "Queen", "King") and r2 in ("10", "Jack", "Queen", "King")
+
+            if ten_value_pair:
+                if dealer_up == 5 and tc >= 5:
+                    return "split"
+                if dealer_up == 6 and tc >= 4:
+                    return "split"
+
+        if rules.USE_PLAYING_DEVIATIONS:
+            if not is_soft and not is_pair and total == 16 and dealer_up == 10 and tc >= 0:
+                return "stand"
+
+            if not is_soft and not is_pair and total == 15 and dealer_up == 10 and tc >= 4:
+                return "stand"
+
+            if not is_soft and total == 10 and dealer_up == 10 and len(hand.cards) == 2 and tc >= 4:
+                return "double"
+
+            if not is_soft and not is_pair and total == 12 and dealer_up == 3 and tc >= 2:
+                return "stand"
+
+            if not is_soft and not is_pair and total == 12 and dealer_up == 2 and tc >= 3:
+                return "stand"
+
+            if not is_soft and total == 11 and dealer_up == 11 and len(hand.cards) == 2 and tc >= 1:
+                return "double"
+
+            if not is_soft and total == 9 and dealer_up == 2 and len(hand.cards) == 2 and tc >= 1:
+                return "double"
+
+            if not is_soft and total == 10 and dealer_up == 11 and len(hand.cards) == 2 and tc >= 4:
+                return "double"
+
+            if not is_soft and total == 9 and dealer_up == 7 and len(hand.cards) == 2 and tc >= 3:
+                return "double"
+
+            if not is_soft and not is_pair and total == 16 and dealer_up == 9 and tc >= 5:
+                return "stand"
+
+            # Negative deviations
+            if not is_soft and not is_pair and total == 12 and dealer_up == 4 and tc < 0:
+                return "hit"
+
+            if not is_soft and not is_pair and total == 12 and dealer_up == 5 and tc < -2:
+                return "hit"
+
+            if not is_soft and not is_pair and total == 12 and dealer_up == 6 and tc < -1:
+                return "hit"
+
+            if not is_soft and not is_pair and total == 13 and dealer_up == 3 and tc < -2:
+                return "hit"
+
+            if not is_soft and not is_pair and total == 13 and dealer_up == 2 and tc < -1:
+                return "hit"
+
+        return basic_action
+
+
+class HiLoBettingEngine:
+    @staticmethod
+    def get_bet(true_count, rules):
+        tc = math.floor(true_count)
+
+        if not rules.USE_BET_SPREAD:
+            return rules.MIN_BET
+
+        if tc <= 0:
+            return rules.BET_RAMP["tc_le_0"]
+        elif tc == 1:
+            return rules.BET_RAMP["tc_1"]
+        elif tc == 2:
+            return rules.BET_RAMP["tc_2"]
+        elif tc == 3:
+            return rules.BET_RAMP["tc_3"]
+        else:
+            return rules.BET_RAMP["tc_ge_4"]
 
 # ============================================================
 # CORE GAME CLASSES
@@ -375,7 +559,17 @@ class Player:
         self.hands.insert(hand_index, new_hand1)
         return True
 
-    def choice(self, hand, dealer_up_card, rules, dealer_peeked_no_blackjack):
+    def choice(self, hand, dealer_up_card, rules, dealer_peeked_no_blackjack, true_count):
+        if self.is_counter and rules.COUNTING_ENABLED:
+            return HiLoStrategyEngine.decide(
+                hand=hand,
+                dealer_up_card=dealer_up_card,
+                rules=rules,
+                current_hand_count=len(self.hands),
+                dealer_peeked_no_blackjack=dealer_peeked_no_blackjack,
+                true_count=true_count,
+            )
+
         return BasicStrategyEngine.decide(
             hand=hand,
             dealer_up_card=dealer_up_card,
@@ -430,6 +624,7 @@ class Dealer:
 
 class GameManager:
     def __init__(self, num_decks, num_players, rules=Rules, verbose=True):
+        self.rules_name = rules.__name__
         self.run_id = self._get_next_run_id()
         self.rules = rules
         self.verbose = verbose
@@ -488,8 +683,12 @@ class GameManager:
 
     def place_bets(self):
         self.log("\n--- Placing Bets ---")
-        for player in self.dealer.players[:]: # Iterate over a copy to allow removal
-            bet_amount = 10
+        for player in self.dealer.players[:]:
+            if player.is_counter and self.rules.COUNTING_ENABLED:
+                bet_amount = HiLoBettingEngine.get_bet(self.true_count, self.rules)
+            else:
+                bet_amount = self.rules.MIN_BET
+
             self.log(f"Player {player.id}: Current balance is {player.balance}, attempting to bet {bet_amount}.")
             if player.balance >= bet_amount:
                 player.hands = [Hand(bet_amount)] # Reset hands and set the bet
@@ -581,7 +780,7 @@ class GameManager:
 
     def offer_insurance(self):
         # only relevant if counting is enabled
-        if not self.rules.COUNTING_ENABLED:
+        if not self.rules.COUNTING_ENABLED or not self.rules.USE_INSURANCE_INDEX:
             return
 
         take = (self.true_count >= self.rules.INSURANCE_TC_THRESHOLD)
@@ -631,7 +830,15 @@ class GameManager:
                 split_done = False
                 while hand.get_value() < 21:
                     dealer_up_card = self.dealer.dealer_hand.cards[0]
-                    decision = player.choice(hand, dealer_up_card, self.rules, dealer_peeked_no_blackjack)
+                    if player.is_counter:
+                        self.log(f"  Counter decision using TC={self.true_count:.2f}")
+                    decision = player.choice(
+                        hand,
+                        dealer_up_card,
+                        self.rules,
+                        dealer_peeked_no_blackjack,
+                        self.true_count
+                    )
 
                     if decision == "hit":
                         card = self._get_card_with_reshuffle()
@@ -862,10 +1069,10 @@ class GameManager:
         # --- Export summary stats ---
         file_exists_summary = os.path.isfile("summary_stats.csv")
         with open("summary_stats.csv", "a", newline="") as f_sum:
-            writer_sum = csv.DictWriter(f_sum, fieldnames=["Run ID"] + list(self.stats.keys()))
+            writer_sum = csv.DictWriter(f_sum, fieldnames=["Run ID", "Ruleset"] + list(self.stats.keys()))
             if not file_exists_summary:
                 writer_sum.writeheader()
-            writer_sum.writerow({"Run ID": self.run_id, **self.stats})
+            writer_sum.writerow({"Run ID": self.run_id, "Ruleset": self.rules_name, **self.stats})
 
         # --- Export player stats ---
         file_exists_player = os.path.isfile("player_stats.csv")
@@ -898,7 +1105,6 @@ if __name__ == "__main__":
     num_players = 6
     num_rounds = 1000
 
-    # Debug mode: verbose=True
-    # Monte Carlo mode: verbose=False
-    game_manager = GameManager(num_decks, num_players, rules=Rules, verbose=True)
+    selected_rules = FullHiLoRules
+    game_manager = GameManager(num_decks, num_players, rules=selected_rules, verbose=True)
     game_manager.play_game(num_rounds)
