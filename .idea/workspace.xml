@@ -5,9 +5,13 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="af04fadd-d054-41d8-9ab0-e4fd7a28c0a0" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/tests/test_hilo.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.coverage" beforeDir="false" afterPath="$PROJECT_DIR$/.coverage" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/player_stats.csv" beforeDir="false" afterPath="$PROJECT_DIR$/player_stats.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/summary_stats.csv" beforeDir="false" afterPath="$PROJECT_DIR$/summary_stats.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_hand.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_hand.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_manager.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_player.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_player.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/test_strategy.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_strategy.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -182,6 +186,7 @@
       <workItem from="1772110219132" duration="42512000" />
       <workItem from="1773318653590" duration="1306000" />
       <workItem from="1773915482517" duration="8530000" />
+      <workItem from="1774529934255" duration="9336000" />
     </task>
     <servers />
   </component>
@@ -190,7 +195,7 @@
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/Blackjack$blackjack__1_.coverage" NAME="blackjack (1) Coverage Results" MODIFIED="1770241053480" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
-    <SUITE FILE_PATH="coverage/Blackjack$blackjack.coverage" NAME="blackjack Coverage Results" MODIFIED="1773140005473" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/Blackjack$blackjack.coverage" NAME="blackjack Coverage Results" MODIFIED="1774539112496" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/Blackjack$blackjack_test.coverage" NAME="blackjack_test Coverage Results" MODIFIED="1770240808746" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
     <SUITE FILE_PATH="coverage/Blackjack$.coverage" NAME=" Coverage Results" MODIFIED="1770305588254" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/Blackjack$Blackjack.coverage" NAME="Blackjack Coverage Results" MODIFIED="1770227050598" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />

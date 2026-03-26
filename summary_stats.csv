@@ -1,2 +1,3 @@
 Run ID,rounds,hands,wins,losses,busts,pushes,blackjacks,surrenders
 1,1000,6171,2549,1981,845,519,263,277
+2,FullHiLoRules,1000,6153,2544,2055,735,530,262,289

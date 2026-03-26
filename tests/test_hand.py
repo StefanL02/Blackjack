@@ -1,5 +1,5 @@
 import pytest
-from blackjack import Hand
+from blackjack import Hand, card_value_for_upcard
 
 def c(rank, suit="Hearts"):
     return {"rank": str(rank), "suit": suit}
@@ -85,9 +85,7 @@ def test_hand_not_a_pair():
     # Even though both are value 10, they are not a "pair" for splitting
     assert h.is_pair() is False
 
-def test_hand_string_representation():
-    h = Hand(bet=50)
-    h.add_card(c("Ace", "Spades"))
-    h.add_card(c("King", "Clubs"))
-    assert "Ace of Spades" in str(h)
-    assert "Bet: 50" in str(h)
+def test_card_value_for_upcard_face_cards():
+    assert card_value_for_upcard(c("Jack")) == 10
+    assert card_value_for_upcard(c("Queen")) == 10
+    assert card_value_for_upcard(c("King")) == 10

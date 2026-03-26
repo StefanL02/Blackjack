@@ -5,3 +5,9 @@ Run ID,Player ID,Role,Start Bankroll,Final Balance,Net Profit
 1,4,Basic,1000,1285.0,285.0
 1,5,Basic,1000,240.0,-760.0
 1,6,Basic,1000,495.0,-505.0
+2,1,Counter,1000,2105.0,1105.0
+2,2,Basic,1000,570.0,-430.0
+2,3,Basic,1000,1095.0,95.0
+2,4,Basic,1000,525.0,-475.0
+2,5,Basic,1000,595.0,-405.0
+2,6,Basic,1000,275.0,-725.0
