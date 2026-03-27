@@ -5,12 +5,17 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="af04fadd-d054-41d8-9ab0-e4fd7a28c0a0" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/tests/test_manager_core.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/tests/test_manager_insurance.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/tests/test_manager_io.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/tests/test_manager_round_flow.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/tests/test_manager_settlements.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/tests/test_manager_turns.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.coverage" beforeDir="false" afterPath="$PROJECT_DIR$/.coverage" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/player_stats.csv" beforeDir="false" afterPath="$PROJECT_DIR$/player_stats.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/summary_stats.csv" beforeDir="false" afterPath="$PROJECT_DIR$/summary_stats.csv" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/test_hand.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_hand.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_manager.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_hilo.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_hilo.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_manager.py" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/test_player.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_player.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/test_strategy.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_strategy.py" afterDir="false" />
     </list>
@@ -186,7 +191,7 @@
       <workItem from="1772110219132" duration="42512000" />
       <workItem from="1773318653590" duration="1306000" />
       <workItem from="1773915482517" duration="8530000" />
-      <workItem from="1774529934255" duration="9336000" />
+      <workItem from="1774529934255" duration="13220000" />
     </task>
     <servers />
   </component>

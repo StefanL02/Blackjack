@@ -32,112 +32,48 @@ def test_betting_engine_returns_min_bet_when_spread_disabled():
     bet = HiLoBettingEngine.get_bet(true_count=5, rules=FullHiLoNoBetSpreadRules)
     assert bet == FullHiLoNoBetSpreadRules.MIN_BET
 
-
-def test_betting_engine_tc_less_equal_zero_uses_lowest_ramp():
-    bet = HiLoBettingEngine.get_bet(true_count=-1.2, rules=FullHiLoRules)
-    assert bet == FullHiLoRules.BET_RAMP["tc_le_0"]
-
-
-def test_betting_engine_tc_zero_uses_lowest_ramp():
-    bet = HiLoBettingEngine.get_bet(true_count=0.0, rules=FullHiLoRules)
-    assert bet == FullHiLoRules.BET_RAMP["tc_le_0"]
-
-
-def test_betting_engine_tc_one_uses_tc_1_ramp():
-    bet = HiLoBettingEngine.get_bet(true_count=1.0, rules=FullHiLoRules)
-    assert bet == FullHiLoRules.BET_RAMP["tc_1"]
-
-
-def test_betting_engine_flooring_true_count_applies():
-    bet = HiLoBettingEngine.get_bet(true_count=1.9, rules=FullHiLoRules)
-    assert bet == FullHiLoRules.BET_RAMP["tc_1"]
-
-
-def test_betting_engine_tc_two_uses_tc_2_ramp():
-    bet = HiLoBettingEngine.get_bet(true_count=2.1, rules=FullHiLoRules)
-    assert bet == FullHiLoRules.BET_RAMP["tc_2"]
-
-
-def test_betting_engine_tc_three_uses_tc_3_ramp():
-    bet = HiLoBettingEngine.get_bet(true_count=3.4, rules=FullHiLoRules)
-    assert bet == FullHiLoRules.BET_RAMP["tc_3"]
-
-
-def test_betting_engine_tc_four_or_more_uses_highest_ramp():
-    bet = HiLoBettingEngine.get_bet(true_count=4.0, rules=FullHiLoRules)
-    assert bet == FullHiLoRules.BET_RAMP["tc_ge_4"]
-
-
-def test_betting_engine_tc_above_four_uses_highest_ramp():
-    bet = HiLoBettingEngine.get_bet(true_count=7.8, rules=FullHiLoRules)
-    assert bet == FullHiLoRules.BET_RAMP["tc_ge_4"]
-
+@pytest.mark.parametrize(
+    "true_count, expected_key",
+    [
+        (-1.2, "tc_le_0"),
+        (0.0, "tc_le_0"),
+        (1.0, "tc_1"),
+        (1.9, "tc_1"),   # checks flooring
+        (2.1, "tc_2"),
+        (3.4, "tc_3"),
+        (4.0, "tc_ge_4"),
+        (7.8, "tc_ge_4"),
+    ]
+)
+def test_betting_engine_uses_correct_ramp_band(true_count, expected_key):
+    bet = HiLoBettingEngine.get_bet(true_count=true_count, rules=FullHiLoRules)
+    assert bet == FullHiLoRules.BET_RAMP[expected_key]
 
 # ============================================================
 # Rules preset tests
 # ============================================================
 
-def test_basic_strategy_rules_disable_all_counting_features():
-    assert BasicStrategyRules.COUNTING_ENABLED is False
-    assert BasicStrategyRules.USE_PLAYING_DEVIATIONS is False
-    assert BasicStrategyRules.USE_FAB4 is False
-    assert BasicStrategyRules.USE_SPLIT_10_DEVIATIONS is False
-    assert BasicStrategyRules.USE_INSURANCE_INDEX is False
-    assert BasicStrategyRules.USE_BET_SPREAD is False
-
-
-def test_counting_no_deviations_rules_only_enable_counting():
-    assert CountingNoDeviationsRules.COUNTING_ENABLED is True
-    assert CountingNoDeviationsRules.USE_PLAYING_DEVIATIONS is False
-    assert CountingNoDeviationsRules.USE_FAB4 is False
-    assert CountingNoDeviationsRules.USE_SPLIT_10_DEVIATIONS is False
-    assert CountingNoDeviationsRules.USE_INSURANCE_INDEX is False
-    assert CountingNoDeviationsRules.USE_BET_SPREAD is False
-
-
-def test_counting_with_insurance_rules_only_enable_insurance_index():
-    assert CountingWithInsuranceRules.COUNTING_ENABLED is True
-    assert CountingWithInsuranceRules.USE_PLAYING_DEVIATIONS is False
-    assert CountingWithInsuranceRules.USE_FAB4 is False
-    assert CountingWithInsuranceRules.USE_SPLIT_10_DEVIATIONS is False
-    assert CountingWithInsuranceRules.USE_INSURANCE_INDEX is True
-    assert CountingWithInsuranceRules.USE_BET_SPREAD is False
-
-
-def test_counting_with_bet_spread_rules_only_enable_spread():
-    assert CountingWithBetSpreadRules.COUNTING_ENABLED is True
-    assert CountingWithBetSpreadRules.USE_PLAYING_DEVIATIONS is False
-    assert CountingWithBetSpreadRules.USE_FAB4 is False
-    assert CountingWithBetSpreadRules.USE_SPLIT_10_DEVIATIONS is False
-    assert CountingWithBetSpreadRules.USE_INSURANCE_INDEX is False
-    assert CountingWithBetSpreadRules.USE_BET_SPREAD is True
-
-
-def test_playing_deviations_only_rules_enable_only_playing_indices():
-    assert PlayingDeviationsOnlyRules.COUNTING_ENABLED is True
-    assert PlayingDeviationsOnlyRules.USE_PLAYING_DEVIATIONS is True
-    assert PlayingDeviationsOnlyRules.USE_FAB4 is False
-    assert PlayingDeviationsOnlyRules.USE_SPLIT_10_DEVIATIONS is False
-    assert PlayingDeviationsOnlyRules.USE_INSURANCE_INDEX is False
-    assert PlayingDeviationsOnlyRules.USE_BET_SPREAD is False
-
-
-def test_full_hilo_no_bet_spread_rules_disable_only_spread():
-    assert FullHiLoNoBetSpreadRules.COUNTING_ENABLED is True
-    assert FullHiLoNoBetSpreadRules.USE_PLAYING_DEVIATIONS is True
-    assert FullHiLoNoBetSpreadRules.USE_FAB4 is True
-    assert FullHiLoNoBetSpreadRules.USE_SPLIT_10_DEVIATIONS is True
-    assert FullHiLoNoBetSpreadRules.USE_INSURANCE_INDEX is True
-    assert FullHiLoNoBetSpreadRules.USE_BET_SPREAD is False
-
-
-def test_full_hilo_rules_enable_everything():
-    assert FullHiLoRules.COUNTING_ENABLED is True
-    assert FullHiLoRules.USE_PLAYING_DEVIATIONS is True
-    assert FullHiLoRules.USE_FAB4 is True
-    assert FullHiLoRules.USE_SPLIT_10_DEVIATIONS is True
-    assert FullHiLoRules.USE_INSURANCE_INDEX is True
-    assert FullHiLoRules.USE_BET_SPREAD is True
+@pytest.mark.parametrize(
+    "rules_cls, counting, playing, fab4, split10, insurance, spread",
+    [
+        (BasicStrategyRules, False, False, False, False, False, False),
+        (CountingNoDeviationsRules, True, False, False, False, False, False),
+        (CountingWithInsuranceRules, True, False, False, False, True, False),
+        (CountingWithBetSpreadRules, True, False, False, False, False, True),
+        (PlayingDeviationsOnlyRules, True, True, False, False, False, False),
+        (FullHiLoNoBetSpreadRules, True, True, True, True, True, False),
+        (FullHiLoRules, True, True, True, True, True, True),
+    ]
+)
+def test_rule_presets_have_expected_flags(
+    rules_cls, counting, playing, fab4, split10, insurance, spread
+):
+    assert rules_cls.COUNTING_ENABLED is counting
+    assert rules_cls.USE_PLAYING_DEVIATIONS is playing
+    assert rules_cls.USE_FAB4 is fab4
+    assert rules_cls.USE_SPLIT_10_DEVIATIONS is split10
+    assert rules_cls.USE_INSURANCE_INDEX is insurance
+    assert rules_cls.USE_BET_SPREAD is spread
 
 
 # ============================================================

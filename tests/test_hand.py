@@ -1,4 +1,3 @@
-import pytest
 from blackjack import Hand, card_value_for_upcard
 
 def c(rank, suit="Hearts"):

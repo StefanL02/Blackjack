@@ -1,5 +1,4 @@
-import pytest
-from blackjack import Player, Rules, FullHiLoRules, BasicStrategyRules
+from blackjack import Player, FullHiLoRules, BasicStrategyRules
 
 def c(rank, suit="Hearts"):
     return {"rank": str(rank), "suit": suit}

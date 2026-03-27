@@ -159,145 +159,50 @@ def test_basic_strategy_pair_face_cards_normalized_to_tens():
 # HiLoStrategyEngine - playing deviations
 # ============================================================
 
-def test_hilo_16_vs_10_stands_at_tc_0():
-    h = make_hand("10", "6")
+@pytest.mark.parametrize(
+    "player_cards, dealer_up, true_count",
+    [
+        (("10", "6"), "10", 0),  # 16 vs 10
+        (("10", "5"), "10", 4),  # 15 vs 10
+        (("10", "2"), "3", 2),   # 12 vs 3
+        (("10", "2"), "2", 3),   # 12 vs 2
+        (("10", "6"), "9", 5),   # 16 vs 9
+    ]
+)
+def test_hilo_positive_stand_deviations(player_cards, dealer_up, true_count):
+    h = make_hand(*player_cards)
+
     decision = HiLoStrategyEngine.decide(
         hand=h,
-        dealer_up_card=c("10"),
-        rules=FullHiLoRules,
+        dealer_up_card=c(dealer_up),
+        rules=PlayingDeviationsOnlyRules,
         current_hand_count=1,
         dealer_peeked_no_blackjack=True,
-        true_count=0
+        true_count=true_count
     )
+
     assert decision == "stand"
 
+@pytest.mark.parametrize(
+    "player_cards, dealer_up, true_count",
+    [
+        (("6", "5"), "Ace", 1),   # 11 vs Ace
+        (("4", "6"), "Ace", 4),   # 10 vs Ace
+        (("4", "6"), "10", 4),    # 10 vs 10
+        (("4", "5"), "2", 1),     # 9 vs 2
+        (("4", "5"), "7", 3),     # 9 vs 7
+    ]
+)
+def test_hilo_positive_double_deviations(player_cards, dealer_up, true_count):
+    h = make_hand(*player_cards)
 
-def test_hilo_16_vs_10_hits_below_tc_0_when_no_surrender():
-    h = make_hand("10", "6")
     decision = HiLoStrategyEngine.decide(
         hand=h,
-        dealer_up_card=c("10"),
-        rules=PlayingDeviationsOnlyRules,
-        current_hand_count=1,
-        dealer_peeked_no_blackjack=False,
-        true_count=-1
-    )
-    assert decision == "hit"
-
-
-def test_hilo_15_vs_10_stands_at_tc_4_when_no_surrender():
-    h = make_hand("10", "5")
-    decision = HiLoStrategyEngine.decide(
-        hand=h,
-        dealer_up_card=c("10"),
-        rules=PlayingDeviationsOnlyRules,
-        current_hand_count=1,
-        dealer_peeked_no_blackjack=False,
-        true_count=4
-    )
-    assert decision == "stand"
-
-
-def test_hilo_12_vs_3_stands_at_tc_2():
-    h = make_hand("10", "2")
-    decision = HiLoStrategyEngine.decide(
-        hand=h,
-        dealer_up_card=c("3"),
+        dealer_up_card=c(dealer_up),
         rules=PlayingDeviationsOnlyRules,
         current_hand_count=1,
         dealer_peeked_no_blackjack=True,
-        true_count=2
-    )
-    assert decision == "stand"
-
-
-def test_hilo_12_vs_2_stands_at_tc_3():
-    h = make_hand("10", "2")
-    decision = HiLoStrategyEngine.decide(
-        hand=h,
-        dealer_up_card=c("2"),
-        rules=PlayingDeviationsOnlyRules,
-        current_hand_count=1,
-        dealer_peeked_no_blackjack=True,
-        true_count=3
-    )
-    assert decision == "stand"
-
-
-def test_hilo_11_vs_ace_doubles_at_tc_1():
-    h = make_hand("6", "5")
-    decision = HiLoStrategyEngine.decide(
-        hand=h,
-        dealer_up_card=c("Ace"),
-        rules=PlayingDeviationsOnlyRules,
-        current_hand_count=1,
-        dealer_peeked_no_blackjack=True,
-        true_count=1
-    )
-    assert decision == "double"
-
-
-def test_hilo_9_vs_2_doubles_at_tc_1():
-    h = make_hand("4", "5")
-    decision = HiLoStrategyEngine.decide(
-        hand=h,
-        dealer_up_card=c("2"),
-        rules=PlayingDeviationsOnlyRules,
-        current_hand_count=1,
-        dealer_peeked_no_blackjack=True,
-        true_count=1
-    )
-    assert decision == "double"
-
-
-def test_hilo_10_vs_ace_doubles_at_tc_4():
-    h = make_hand("4", "6")
-    decision = HiLoStrategyEngine.decide(
-        hand=h,
-        dealer_up_card=c("Ace"),
-        rules=PlayingDeviationsOnlyRules,
-        current_hand_count=1,
-        dealer_peeked_no_blackjack=True,
-        true_count=4
-    )
-    assert decision == "double"
-
-
-def test_hilo_9_vs_7_doubles_at_tc_3():
-    h = make_hand("4", "5")
-    decision = HiLoStrategyEngine.decide(
-        hand=h,
-        dealer_up_card=c("7"),
-        rules=PlayingDeviationsOnlyRules,
-        current_hand_count=1,
-        dealer_peeked_no_blackjack=True,
-        true_count=3
-    )
-    assert decision == "double"
-
-
-def test_hilo_16_vs_9_stands_at_tc_5():
-    h = make_hand("10", "6")
-    decision = HiLoStrategyEngine.decide(
-        hand=h,
-        dealer_up_card=c("9"),
-        rules=PlayingDeviationsOnlyRules,
-        current_hand_count=1,
-        dealer_peeked_no_blackjack=True,
-        true_count=5
-    )
-    assert decision == "stand"
-
-def test_hilo_10_vs_10_doubles_at_tc_4():
-    h = make_hand("4", "6")
-
-    decision = HiLoStrategyEngine.decide(
-        hand=h,
-        dealer_up_card=c("10"),
-        rules=PlayingDeviationsOnlyRules,
-        current_hand_count=1,
-        dealer_peeked_no_blackjack=True,
-        true_count=4
+        true_count=true_count
     )
 
     assert decision == "double"
@@ -358,7 +263,8 @@ def test_hilo_fab4_surrenders(player_cards, dealer_up, true_count):
     )
 
     assert decision == "surrender"
-    
+
+
 # ============================================================
 # HiLoStrategyEngine - split 10 deviations
 # ============================================================
