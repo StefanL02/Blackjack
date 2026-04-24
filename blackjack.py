@@ -336,10 +336,11 @@ class HiLoStrategyEngine:
             ten_value_pair = r1 in ("10", "Jack", "Queen", "King") and r2 in ("10", "Jack", "Queen", "King")
 
             if ten_value_pair:
-                if dealer_up == 5 and tc >= 5:
-                    return "split"
-                if dealer_up == 6 and tc >= 4:
-                    return "split"
+                if current_hand_count < rules.MAX_HANDS:
+                    if dealer_up == 5 and tc >= 5:
+                        return "split"
+                    if dealer_up == 6 and tc >= 4:
+                        return "split"
 
         if rules.USE_PLAYING_DEVIATIONS:
             if not is_soft and not is_pair and total == 16 and dealer_up == 10 and tc >= 0:
@@ -642,8 +643,8 @@ class GameManager:
 
         self.dealer = Dealer(self.shoe, num_players, self)
         # Create players with unique IDs
-        self.dealer.players = [Player(bet=0, balance=1000, max_hands=Rules.MAX_HANDS, is_counter=False) for _ in range(num_players)]
-        self.starting_bankroll = 1000
+        self.dealer.players = [Player(bet=0, balance=100000, max_hands=Rules.MAX_HANDS, is_counter=False) for _ in range(num_players)]
+        self.starting_bankroll = 100000
 
         # Assign roles: Only Player 1 is a Counter, everyone else is Basic Strategy
         for i, player in enumerate(self.dealer.players):
@@ -683,6 +684,7 @@ class GameManager:
 
     def place_bets(self):
         self.log("\n--- Placing Bets ---")
+        self.log(f"TC at betting time: {self.true_count:.2f}")
         for player in self.dealer.players[:]:
             if player.is_counter and self.rules.COUNTING_ENABLED:
                 bet_amount = HiLoBettingEngine.get_bet(self.true_count, self.rules)
@@ -803,6 +805,7 @@ class GameManager:
 
     def handle_player_turns(self, dealer_peeked_no_blackjack):
         self.log("\n--- Player Turns ---")
+        self.log(f"TC at betting time: {self.true_count:.2f}")
         # Need to find the index of the player in the current list for deal_card_to_player
         for player_current_list_index, player in enumerate(self.dealer.players):
             self.log(f"\nPlayer {player.id}'s turn:")
@@ -839,7 +842,7 @@ class GameManager:
                         dealer_peeked_no_blackjack,
                         self.true_count
                     )
-
+                    self.log(f"  Decision: {decision}, value: {hand.get_value()}, cards: {len(hand.cards)}")
                     if decision == "hit":
                         card = self._get_card_with_reshuffle()
                         if not card:
@@ -861,6 +864,7 @@ class GameManager:
                         hand.surrendered = True
                         self.log("  Surrender.")
                         break
+
 
 
                     elif decision == "double":
@@ -887,6 +891,23 @@ class GameManager:
 
                             break
 
+                        else:
+
+                            self.log("  Double not allowed (insufficient funds) -> Hit.")
+
+                            card = self._get_card_with_reshuffle()
+
+                            if card:
+                                player.add_card_to_hand(card, hand_index)
+
+                            hand = player.hands[hand_index]
+
+                            if hand.get_value() > 21:
+                                self.log("  Bust!")
+
+                                break
+
+
 
                     elif decision == "split":
 
@@ -908,13 +929,17 @@ class GameManager:
 
                             self.log(f"  Split performed. Remaining balance: {player.balance}")
 
+                            self.log(f"DEBUG: number of hands = {len(player.hands)}")
+
                             split_done = True
 
                             break
 
-                    else:
-                        self.log(f"  Unknown decision {decision} -> Stand.")
-                        break
+                        else:  # ← same indent as "if player.split_hand"
+
+                            self.log("  Split not allowed (max hands) -> Stand.")
+
+                            break
 
                 if split_done:
                     continue
@@ -1024,7 +1049,7 @@ class GameManager:
                 if hand.insurance_bet > 0:
                     if dealer_bj:
                         # 3:1 total return (2:1 profit + stake back)
-                        ins_payout = hand.insurance_bet * 3
+                        ins_payout = hand.insurance_bet * 2
                         player.balance += ins_payout
                         self.log(f"  [INSURANCE WIN] +{hand.insurance_bet * 2} profit.")
                     else:
@@ -1103,7 +1128,7 @@ class GameManager:
 if __name__ == "__main__":
     num_decks = Rules.NUM_DECKS
     num_players = 6
-    num_rounds = 1000
+    num_rounds = 10000
 
     selected_rules = FullHiLoRules
     game_manager = GameManager(num_decks, num_players, rules=selected_rules, verbose=True)
