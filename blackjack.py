@@ -464,6 +464,9 @@ class Hand:
         self.is_split_aces_hand = False
         self.insurance_bet = 0.0
 
+        #TC at betting time
+        self.tc_at_bet = 0.0
+
 
     def add_card(self, card):
         self.cards.append(card)
@@ -545,6 +548,8 @@ class Player:
         new_hand2 = Hand(hand_to_split.bet)
         new_hand1.is_split_hand = True
         new_hand2.is_split_hand = True
+        new_hand1.tc_at_bet = hand_to_split.tc_at_bet
+        new_hand2.tc_at_bet = hand_to_split.tc_at_bet
 
         if splitting_aces:
             new_hand1.is_split_aces_hand = True
@@ -630,6 +635,10 @@ class GameManager:
         self.rules = rules
         self.verbose = verbose
 
+        self.shoe_id = 0
+        self.shoe_stats = None
+        self._start_new_shoe_stats()
+
         self.num_decks = num_decks
         self.shoe = Shoe(num_decks)
 
@@ -643,8 +652,8 @@ class GameManager:
 
         self.dealer = Dealer(self.shoe, num_players, self)
         # Create players with unique IDs
-        self.dealer.players = [Player(bet=0, balance=100000, max_hands=Rules.MAX_HANDS, is_counter=False) for _ in range(num_players)]
-        self.starting_bankroll = 100000
+        self.dealer.players = [Player(bet=0, balance=16000, max_hands=Rules.MAX_HANDS, is_counter=False) for _ in range(num_players)]
+        self.starting_bankroll = 16000
 
         # Assign roles: Only Player 1 is a Counter, everyone else is Basic Strategy
         for i, player in enumerate(self.dealer.players):
@@ -658,6 +667,59 @@ class GameManager:
         # optional: basic stats (extend for Monte Carlo later)
         self.stats = {"rounds": 0, "hands": 0, "wins": 0, "losses": 0, "busts": 0, "pushes": 0, "blackjacks": 0, "surrenders": 0}
 
+    def _start_new_shoe_stats(self):
+        self.shoe_id += 1
+        self.shoe_stats = {
+            "shoe_id": self.shoe_id,
+            "rounds": 0,
+            "tc_frequency": {-4: 0, -3: 0, -2: 0, -1: 0, 0: 0, 1: 0, 2: 0, 3: 0, 4: 0},
+            "counter_wins_by_tc": {-4: 0, -3: 0, -2: 0, -1: 0, 0: 0, 1: 0, 2: 0, 3: 0, 4: 0},
+            "counter_losses_by_tc": {-4: 0, -3: 0, -2: 0, -1: 0, 0: 0, 1: 0, 2: 0, 3: 0, 4: 0},
+            "counter_hands": 0,
+            "counter_net": 0.0,
+            "basic_net": 0.0,
+            "max_bet_opportunities": 0,
+            "max_bets_placed": 0,
+        }
+
+    def _tc_bucket(self, tc):
+        # Clamp TC to -4 and +4 buckets
+        return max(-4, min(4, math.floor(tc)))
+
+    def _export_shoe_stats(self):
+        tc_freq = self.shoe_stats["tc_frequency"]
+        tc_wins = self.shoe_stats["counter_wins_by_tc"]
+        tc_losses = self.shoe_stats["counter_losses_by_tc"]
+
+        row = {
+            "Run ID": self.run_id,
+            "Ruleset": self.rules_name,
+            "Shoe ID": self.shoe_stats["shoe_id"],
+            "Rounds": self.shoe_stats["rounds"],
+            "Counter Net": self.shoe_stats["counter_net"],
+            "Basic Net": self.shoe_stats["basic_net"],
+            "Max Bet Opportunities": self.shoe_stats["max_bet_opportunities"],
+            "Max Bets Placed": self.shoe_stats["max_bets_placed"],
+        }
+
+        # TC frequency and win rate columns
+        for bucket in range(-4, 5):
+            row[f"TC{bucket:+d} Freq"] = tc_freq[bucket]
+            row[f"TC{bucket:+d} Wins"] = tc_wins[bucket]
+            row[f"TC{bucket:+d} Losses"] = tc_losses[bucket]
+            wins = tc_wins[bucket]
+            losses = tc_losses[bucket]
+            total = wins + losses
+            row[f"TC{bucket:+d} WinRate"] = round(wins / total, 4) if total > 0 else ""
+
+        file_exists = os.path.isfile("shoe_stats.csv")
+        with open("shoe_stats.csv", "a", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=list(row.keys()))
+            if not file_exists:
+                writer.writeheader()
+            writer.writerow(row)
+
+
     def log(self, msg):
         if self.verbose:
             print(msg)
@@ -665,18 +727,28 @@ class GameManager:
     def _reshuffle_if_needed(self):
         if len(self.shoe) < self.reshuffle_threshold:
             self.log("\n--- Reshuffling Shoe ---")
+
+            # Export current shoe stats before reshuffle
+            self._export_shoe_stats()
+            self._start_new_shoe_stats()
+
             self.shoe = Shoe(self.num_decks)
             self.initial_shoe_size = len(self.shoe)
             self.reshuffle_threshold = int(self.initial_shoe_size * self.rules.RESHUFFLE_AT_REMAINING)
             self.dealer.shoe = self.shoe
-
             self.log(f"Shoe reshuffled. New shoe size: {len(self.shoe)}")
             self.running_count = 0
-            self.update_true_count()  # Derives 0.0 correctly from the fresh shoe
-            self.hole_card_revealed = False  # Ensures the new round's hole card isn't "pre-revealed"
+            self.update_true_count()
+            self.hole_card_revealed = False
 
     def _get_card_with_reshuffle(self, visible=True):
-        self._reshuffle_if_needed()
+        if len(self.shoe) == 0:
+            self.log("Warning: Shoe empty mid-round, emergency reshuffle.")
+            self.shoe = Shoe(self.num_decks)
+            self.dealer.shoe = self.shoe
+            self.running_count = 0
+            self.update_true_count()
+
         card = self.shoe.deal()
         if card and visible:
             self.update_running_count(card)
@@ -685,19 +757,33 @@ class GameManager:
     def place_bets(self):
         self.log("\n--- Placing Bets ---")
         self.log(f"TC at betting time: {self.true_count:.2f}")
+
+        # Track TC frequency per round
+        bucket = self._tc_bucket(self.true_count)
+        self.shoe_stats["tc_frequency"][bucket] += 1
+        self.shoe_stats["rounds"] += 1
+
+        # Track max bet opportunities
+        if math.floor(self.true_count) >= 4:
+            self.shoe_stats["max_bet_opportunities"] += 1
+
         for player in self.dealer.players[:]:
             if player.is_counter and self.rules.COUNTING_ENABLED:
                 bet_amount = HiLoBettingEngine.get_bet(self.true_count, self.rules)
+                if bet_amount == self.rules.BET_RAMP["tc_ge_4"]:
+                    self.shoe_stats["max_bets_placed"] += 1
             else:
                 bet_amount = self.rules.MIN_BET
 
             self.log(f"Player {player.id}: Current balance is {player.balance}, attempting to bet {bet_amount}.")
             if player.balance >= bet_amount:
-                player.hands = [Hand(bet_amount)] # Reset hands and set the bet
-                player.balance -= bet_amount # Deduct the bet from the player's balance
+                player.hands = [Hand(bet_amount)]
+                player.hands[0].tc_at_bet = self.true_count
+                player.balance -= bet_amount
                 self.log(f"Player {player.id} placed a bet of {bet_amount}. Remaining balance: {player.balance}")
             else:
-                self.log(f"Player {player.id} does not have enough funds to place a bet of {bet_amount}. Player eliminated.")
+                self.log(
+                    f"Player {player.id} does not have enough funds to place a bet of {bet_amount}. Player eliminated.")
                 self.eliminated_players.append(player)
                 self.dealer.players.remove(player)
 
@@ -1045,6 +1131,24 @@ class GameManager:
 
                 player.balance += winnings
 
+                # Track per-shoe player net
+                profit = winnings - bet
+                if outcome == "surrender":
+                    profit = -bet * 0.5
+                elif outcome == "bust" or outcome == "lose":
+                    profit = -bet
+
+                if player.is_counter:
+                    self.shoe_stats["counter_net"] += profit
+                    self.shoe_stats["counter_hands"] += 1
+                    bucket = self._tc_bucket(hand.tc_at_bet)
+                    if outcome in ("win", "blackjack"):
+                        self.shoe_stats["counter_wins_by_tc"][bucket] += 1
+                    elif outcome in ("bust", "lose"):
+                        self.shoe_stats["counter_losses_by_tc"][bucket] += 1
+                else:
+                    self.shoe_stats["basic_net"] += profit / (len(self.dealer.players) - 1 or 1)
+
                 # 2. Insurance Settlement
                 if hand.insurance_bet > 0:
                     if dealer_bj:
@@ -1122,14 +1226,19 @@ class GameManager:
             print("\nCSV files exported:")
             print(os.path.abspath("summary_stats.csv"))
             print(os.path.abspath("player_stats.csv"))
+            print(os.path.abspath("shoe_stats.csv"))
+
+        # Export final shoe stats
+        self._export_shoe_stats()
 
 
 
 if __name__ == "__main__":
     num_decks = Rules.NUM_DECKS
     num_players = 6
-    num_rounds = 10000
+    num_rounds = 150000
 
-    selected_rules = FullHiLoRules
+    selected_rules = BasicStrategyRules
     game_manager = GameManager(num_decks, num_players, rules=selected_rules, verbose=True)
     game_manager.play_game(num_rounds)
+
