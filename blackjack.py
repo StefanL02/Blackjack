@@ -32,6 +32,8 @@ class Rules:
     INSURANCE_ENABLED = True
     INSURANCE_TC_THRESHOLD = 3  # take insurance if true_count >= 3
 
+    OPTIMAL_ENTRY_TC = None
+
     # Hi-Lo Card Counting Config
     COUNTING_ENABLED = True
     HI_LO_TAGS = {
@@ -116,6 +118,15 @@ class FullHiLoRules(Rules):
     USE_SPLIT_10_DEVIATIONS = True
     USE_INSURANCE_INDEX = True
     USE_BET_SPREAD = True
+
+class FullHiLoOptimalEntryRules(Rules):
+    COUNTING_ENABLED = True
+    USE_PLAYING_DEVIATIONS = True
+    USE_FAB4 = True
+    USE_SPLIT_10_DEVIATIONS = True
+    USE_INSURANCE_INDEX = True
+    USE_BET_SPREAD = True
+    WONG_ENTRY_TC = 2
 
 # ============================================================
 # BASIC STRATEGY TABLES (4–8 decks, H17, DAS, Late Surrender)
@@ -672,9 +683,9 @@ class GameManager:
         self.shoe_stats = {
             "shoe_id": self.shoe_id,
             "rounds": 0,
-            "tc_frequency": {-4: 0, -3: 0, -2: 0, -1: 0, 0: 0, 1: 0, 2: 0, 3: 0, 4: 0},
-            "counter_wins_by_tc": {-4: 0, -3: 0, -2: 0, -1: 0, 0: 0, 1: 0, 2: 0, 3: 0, 4: 0},
-            "counter_losses_by_tc": {-4: 0, -3: 0, -2: 0, -1: 0, 0: 0, 1: 0, 2: 0, 3: 0, 4: 0},
+            "tc_frequency": {i: 0 for i in range(-6, 7)},
+            "counter_wins_by_tc": {i: 0 for i in range(-6, 7)},
+            "counter_losses_by_tc": {i: 0 for i in range(-6, 7)},
             "counter_hands": 0,
             "counter_net": 0.0,
             "basic_net": 0.0,
@@ -683,8 +694,7 @@ class GameManager:
         }
 
     def _tc_bucket(self, tc):
-        # Clamp TC to -4 and +4 buckets
-        return max(-4, min(4, math.floor(tc)))
+        return max(-6, min(6, math.floor(tc)))
 
     def _export_shoe_stats(self):
         tc_freq = self.shoe_stats["tc_frequency"]
@@ -703,7 +713,7 @@ class GameManager:
         }
 
         # TC frequency and win rate columns
-        for bucket in range(-4, 5):
+        for bucket in range(-6, 7):
             row[f"TC{bucket:+d} Freq"] = tc_freq[bucket]
             row[f"TC{bucket:+d} Wins"] = tc_wins[bucket]
             row[f"TC{bucket:+d} Losses"] = tc_losses[bucket]
@@ -782,10 +792,11 @@ class GameManager:
                 player.balance -= bet_amount
                 self.log(f"Player {player.id} placed a bet of {bet_amount}. Remaining balance: {player.balance}")
             else:
-                self.log(
-                    f"Player {player.id} does not have enough funds to place a bet of {bet_amount}. Player eliminated.")
-                self.eliminated_players.append(player)
-                self.dealer.players.remove(player)
+                # New player joins with fresh bankroll
+                player.balance = self.starting_bankroll
+                player.hands = [Hand(bet_amount)]
+                player.balance -= bet_amount
+                self.log(f"Player {player.id} reloads bankroll to {self.starting_bankroll}")
 
     def dealer_has_blackjack(self):
         return self.dealer.dealer_hand.get_value() == 21 and len(self.dealer.dealer_hand.cards) == 2
@@ -979,7 +990,7 @@ class GameManager:
 
                         else:
 
-                            self.log("  Double not allowed (insufficient funds) -> Hit.")
+                            self.log("  Double not allowed (insufficient funds) decision Hit.")
 
                             card = self._get_card_with_reshuffle()
 
@@ -1093,7 +1104,7 @@ class GameManager:
         self.log("\n--- Settling Bets ---")
         dealer_hand = self.dealer.dealer_hand
         dealer_bj = self.dealer_has_blackjack()
-        active_players = []
+
 
         for player in self.dealer.players:
             self.log(f"\nPlayer {player.id} (Balance: {player.balance}):")
@@ -1161,14 +1172,6 @@ class GameManager:
 
                     # IMPORTANT: Reset for safety
                     hand.insurance_bet = 0.0
-
-            if player.balance > 0:
-                active_players.append(player)
-            else:
-                self.log(f"Player {player.id} has been eliminated with a balance of {player.balance}.")
-                self.eliminated_players.append(player)
-
-        self.dealer.players = active_players
 
     def play_game(self, num_rounds=5):
         round_num = 1
@@ -1238,7 +1241,7 @@ if __name__ == "__main__":
     num_players = 6
     num_rounds = 150000
 
-    selected_rules = BasicStrategyRules
-    game_manager = GameManager(num_decks, num_players, rules=selected_rules, verbose=True)
+    selected_rules = CountingNoDeviationsRules
+    game_manager = GameManager(num_decks, num_players, rules=selected_rules, verbose=False)
     game_manager.play_game(num_rounds)
 
