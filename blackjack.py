@@ -126,7 +126,7 @@ class FullHiLoOptimalEntryRules(Rules):
     USE_SPLIT_10_DEVIATIONS = True
     USE_INSURANCE_INDEX = True
     USE_BET_SPREAD = True
-    WONG_ENTRY_TC = 2
+    OPTIMAL_ENTRY_TC = 2
 
 # ============================================================
 # BASIC STRATEGY TABLES (4–8 decks, H17, DAS, Late Surrender)
@@ -779,6 +779,12 @@ class GameManager:
 
         for player in self.dealer.players[:]:
             if player.is_counter and self.rules.COUNTING_ENABLED:
+                # Optimal Entry - sit out if TC below entry threshold
+                if self.rules.OPTIMAL_ENTRY_TC is not None and self.true_count < self.rules.OPTIMAL_ENTRY_TC:
+                    player.hands = [Hand(0)]
+                    self.log(
+                        f"Player {player.id} (COUNTER) sitting out - TC={self.true_count:.2f} below threshold {self.rules.OPTIMAL_ENTRY_TC}")
+                    continue
                 bet_amount = HiLoBettingEngine.get_bet(self.true_count, self.rules)
                 if bet_amount == self.rules.BET_RAMP["tc_ge_4"]:
                     self.shoe_stats["max_bets_placed"] += 1
@@ -1241,7 +1247,7 @@ if __name__ == "__main__":
     num_players = 6
     num_rounds = 150000
 
-    selected_rules = CountingNoDeviationsRules
+    selected_rules = FullHiLoOptimalEntryRules
     game_manager = GameManager(num_decks, num_players, rules=selected_rules, verbose=False)
     game_manager.play_game(num_rounds)
 
